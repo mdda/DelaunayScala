@@ -36,13 +36,14 @@ package object Delaunay {
   /* Do something better than n^4 here... */
   
   /*
-    Triangulation subroutine
     Takes as input NV vertices in array pxyz
+    The vertex array pxyz must be big enough to hold 3 more points
+    The vertex array must be sorted in increasing x values say
+    
     Returned is a list of ntri triangular faces in the array v
     These triangles are arranged in a consistent clockwise order.
     The triangle array 'v' should be malloced to 3 * nv
-    The vertex array pxyz must be big enough to hold 3 more points
-    The vertex array must be sorted in increasing x values say
+
     
     qsort(p,nv,sizeof(XYZ),XYZCompare);
     
@@ -69,50 +70,50 @@ package object Delaunay {
 
     /*
       Return TRUE if a point q(x,y) is inside the circumcircle made up of the points p1(x,y), p2(x,y), p3(x,y)
-      The circumcircle centre (x,y) is returned and the radius r as a triple (x,y,r)
+      The circumcircle centre (x,y) is returned and the radius r
       NOTE: A point on the edge is inside the circumcircle
     */
-    def CircumCircle( q:Vector2, p1:Vector2, p2:Vector2, p3:Vector2) : (Boolean, XYZ) {
+    def CircumCircle( q:Vector2, p1:Vector2, p2:Vector2, p3:Vector2) : (Boolean, Vector2, Float) {
       if ( Math.abs(p1.y-p2.y) < EPSILON && Math.abs(p2.y-p3.y) < EPSILON ) {
         System.out.println("CircumCircle: Points are colinear");
-        (false, new XYZ(0,0,0))
+        (false, new Vector2(0,0), 0)
       }
       else {
         val (mx1, my1) = ( (p1.x+p2.x)/2.0, (p1.y+p2.y)/2.0 )
         val (mx2, my2) = ( (p2.x+p3.x)/2.0, (p2.y+p3.y)/2.0 )
         
-        val (m1,m2, xc,yc) = 
+        val c = 
           if ( Math.abs(p2.y-p1.y) < EPSILON ) {
             val m2 = -(p3.x-p2.x) / (p3.y-p2.y)
             val xc =  (p2.x+p1.x) / 2.0
             val yc =  m2 * (xc - mx2) + my2
-            (0,m2, xc,yc)
+            new Vector2(xc, yc)
           }
           else 
             if ( Math.abs(p3.y-p2.y) < EPSILON ) {
               val m1 = -(p2.x-p1.x) / (p2.y-p1.y)
               val xc =  (p3.x + p2.x) / 2.0
               val yc =  m1 * (xc - mx1) + my1
-              (m1,0, xc,yc)
+              new Vector2(xc, yc)
             }
             else {
               val m1 = -(p2.x-p1.x) / (p2.y-p1.y)
               val m2 = -(p3.x-p2.x) / (p3.y-p2.y)
               val xc =  (m1*mx1 - m2*mx2 + my2 - my1) / (m1 - m2)
               val yc =  m1 * (xc - mx1) + my1
-              (m1,m2, xc,yc)
+              new Vector2(xc, yc)
             }
           
           val rsqr = {
-            val (dx, dy) = (p2.x - xc, p2.y - yc)
+            val (dx, dy) = (p2.x-c.x, p2.y-c.y)
             dx*dx + dy*dy
           }
           val drsqr = {
-            val (dx, dy) = (q.x - xc, q.y - yc)
+            val (dx, dy) = (q.x-c.y, q.y-c.y)
             dx*dx + dy*dy
           }
           
-          ( drsqr <= rsqr, new XYZ(xc,yc, Math.sqrt(rsqr)) )
+          ( drsqr <= rsqr, c, Math.sqrt(rsqr) )
         }
       }
 
@@ -131,17 +132,24 @@ package object Delaunay {
       
       int		ntri			= 0;
 */
-      val nv = measurements.length
-      val nedge = 0
+
+      val n_points = measurements.length // Was nv
+      val n_edges = 0
+
+
       
       // Allocate memory for the completeness list, flag for each triangle
       trimax = 4*nv;
       complete = new boolean[trimax];
       for (int ic=0; ic<trimax; ic++) complete[ic] = false;
       
+      
       /* Allocate memory for the edge list */
       edges = new IEDGE[emax];
       for (int ie=0; ie<emax; ie++) edges[ie] = new IEDGE();
+
+
+
       
       // Find the maximum and minimum vertex bounds.
       // This is to allow calculation of the bounding triangle
@@ -160,59 +168,43 @@ package object Delaunay {
         The supertriangle is the first triangle in the triangle list.
       */
       
-      pxyz[nv+0].x = xmid - 2.0 * dmax;
-      pxyz[nv+0].y = ymid - dmax;
-      pxyz[nv+0].z = 0.0;
-      
-      pxyz[nv+1].x = xmid;
-      pxyz[nv+1].y = ymid + 2.0 * dmax;
-      pxyz[nv+1].z = 0.0;
-      
-      pxyz[nv+2].x = xmid + 2.0 * dmax;
-      pxyz[nv+2].y = ymid - dmax;
-      pxyz[nv+2].z = 0.0;
-      
-      v[0].p1 = nv;
-      v[0].p2 = nv+1;
-      v[0].p3 = nv+2;
-      
+      val point = measurements ::: List( 
+        Vector2( Pmid.x - 2.0*diameter, Pmid.y - 1.0*diameter), 
+        Vector2( Pmid.x - 0.0*diameter, Pmid.y + 2.0*diameter), 
+        Vector2( Pmid.x + 2.0*diameter, Pmid.y - 1.0*diameter)
+      )
+     
+      val triangles = scala.collections.mutable.List( ITRIANGLE(nv+0, nv+1, nv+2) )
       complete[0] = false;
-      ntri = 1;
+      n_triangles = 1;
       
       // Include each point one at a time into the existing mesh
-      for (int i=0;i<nv;i++) {
-        xp = pxyz[i].x;
-        yp = pxyz[i].y;
-        nedge = 0;
+      for (int i=0; i<n_points; i++) {
+        val q = point(i)
+        
+        n_edges = 0
         
         /*
           Set up the edge buffer.
-          If the point (xp,yp) lies inside the circumcircle then the
-          three edges of that triangle are added to the edge buffer
-          and that triangle is removed.
+          If the point 'q' lies inside the circumcircle then the three edges 
+          of that triangle are added to the edge buffer and that triangle is removed.
         */
-        XYZ circle = new XYZ();
-        for (int j=0;j<ntri;j++) {
+        for (int j=0; j<n_triangles; j++) {
           if (complete[j])
             continue;
-          x1 = pxyz[v[j].p1].x;
-          y1 = pxyz[v[j].p1].y;
+            
+          p1 = point( v[j].p1 )
+          p2 = point( v[j].p2 )
+          p3 = point( v[j].p3 )
           
-          x2 = pxyz[v[j].p2].x;
-          y2 = pxyz[v[j].p2].y;
+          val (inside, circle, r) = CircumCircle(q,  p1,  p2,  p3)
+          //xc = circle.x; yc = circle.y; r = circle.z;
           
-          x3 = pxyz[v[j].p3].x;
-          y3 = pxyz[v[j].p3].y;
-          
-          inside = CircumCircle( xp, yp,  x1, y1,  x2, y2,  x3, y3,  circle );
-          
-          xc = circle.x; yc = circle.y; r = circle.z;
-          
-          if (xc + r < xp) 
+          if (circle.x + r < p.x) 
             complete[j] = true;
             
           if (inside) {
-            /* Check that we haven't exceeded the edge list size */
+            /* Check that we haven't exceeded the edge list size 
             if (nedge+3 >= emax) {
               emax += 100;
               IEDGE[] edges_n = new IEDGE[emax];
@@ -220,6 +212,10 @@ package object Delaunay {
               System.arraycopy(edges, 0, edges_n, 0, edges.length);
               edges = edges_n;
             }
+            */
+            
+            // Add these edges onto the edge pile
+            {
             edges[nedge+0].p1 = v[j].p1;
             edges[nedge+0].p2 = v[j].p2;
             
@@ -230,14 +226,20 @@ package object Delaunay {
             edges[nedge+2].p2 = v[j].p1;
             
             nedge += 3;
+            }
             
-            v[j].p1 = v[ntri-1].p1;
+            // Delete this triangle (cover it over with another one)
+            {
+            v[j].p1 = v[ntri-1].p1; 
             v[j].p2 = v[ntri-1].p2;
             v[j].p3 = v[ntri-1].p3;
             
             complete[j] = complete[ntri-1];
             
             ntri--;
+            }
+            
+            // Do this iteration again (one the data we've just swapped in)
             j--;
           }
         }
@@ -284,10 +286,12 @@ package object Delaunay {
           ntri++;
         }
       }
+      // Include each point one at a time into the existing mesh (END)
+      
       
       
       /*
-        Remove triangles with supertriangle vertices
+        Final Step : Remove triangles with supertriangle vertices
         These are triangles which have a vertex number greater than nv
       */
       for (int i=0;i<ntri;i++) {
@@ -297,6 +301,7 @@ package object Delaunay {
           i--;
         }
       }
+      INSTEAD - Just map filter them out...
       
       return ntri;
     }
