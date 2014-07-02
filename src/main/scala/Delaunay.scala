@@ -60,19 +60,43 @@ package object Delaunay {
     }
   */
 
-  //int Triangulate ( int nv, XYZ pxyz[], ITRIANGLE v[] ) {
-  def Triangulation_bourke(measurements : List[Vector2]) : Seq[(Int, Int, Int)] = {
-    case class ITRIANGLE(p1:Int, p2:Int, p3:Int)
-    case class IEDGE(p1:Int = -1, p2:Int = -1)
-    case class XYZ(p1:Float, p2:Float, p3:Float)
+  def Triangulation_bourke(measurements : List[Vector2]) : Seq[(Int, Int, Int)] = { // NB: List must be sorted in increasing x...
+    case class ITRIANGLE(p1:Int, p2:Int, p3:Int, completed:Boolean)
+    case class IEDGE(p1:Int, p2:Int)
+    
+    class AnihilationSet[IEDGE] extends Set[IEDGE] {
+      def add_with_anihilation(that: IEDGE):AnihilationSet[IEDGE] = {
+        if( this.contains(that)) {
+          this.remove(that)
+        }
+        else {
+          val that_reversed = IEDGE(that.p2, that.p1)
+          if( this.contains(that_reversed) ) {
+            this.remove(that_reversed)
+          }
+          else {
+            this.add(that)
+          }
+        }
+      }
+    }
+    
+    /*
+     {
+      override def equals(o: Any) = o match {
+        case that: IEDGE(q1, q2) => ((p1==q1) && (p2==q2)) || ((p1==q2) && (p2==q1))
+        case _ => false
+      }
+    }
+    */
+    
+    //case class XYZ(p1:Float, p2:Float, p3:Float)
 
     val EPSILON = 0.000001
 
-    /*
-      Return TRUE if a point q(x,y) is inside the circumcircle made up of the points p1(x,y), p2(x,y), p3(x,y)
-      The circumcircle centre (x,y) is returned and the radius r
-      NOTE: A point on the edge is inside the circumcircle
-    */
+    //  Return TRUE if a point q(x,y) is inside the circumcircle made up of the points p1(x,y), p2(x,y), p3(x,y)
+    //  The circumcircle centre (x,y) is returned and the radius r
+    //  NOTE: A point on the edge is inside the circumcircle
     def CircumCircle( q:Vector2, p1:Vector2, p2:Vector2, p3:Vector2) : (Boolean, Vector2, Float) {
       if ( Math.abs(p1.y-p2.y) < EPSILON && Math.abs(p2.y-p3.y) < EPSILON ) {
         System.out.println("CircumCircle: Points are colinear");
@@ -117,42 +141,9 @@ package object Delaunay {
         }
       }
 
-      // Got to here...
-/*
-      boolean complete[] 		= null;
-      IEDGE 	edges[] 		= null;
-      int 	nedge 			= 0;
-      int 	trimax, emax 	= 200;
-      int 	status 			= 0;
-      
-      boolean	inside;
-      double 	xp, yp, x1, y1, x2, y2, x3, y3, xc, yc, r;
-      double 	xmin, xmax, ymin, ymax, xmid, ymid;
-      double 	dx, dy, dmax;
-      
-      int		ntri			= 0;
-*/
-
       val n_points = measurements.length // Was nv
-      val n_edges = 0
-
-
       
-      // Allocate memory for the completeness list, flag for each triangle
-      trimax = 4*nv;
-      complete = new boolean[trimax];
-      for (int ic=0; ic<trimax; ic++) complete[ic] = false;
-      
-      
-      /* Allocate memory for the edge list */
-      edges = new IEDGE[emax];
-      for (int ie=0; ie<emax; ie++) edges[ie] = new IEDGE();
-
-
-
-      
-      // Find the maximum and minimum vertex bounds.
-      // This is to allow calculation of the bounding triangle
+      // Find the maximum and minimum vertex bounds, to allow calculation of the bounding triangle
       val Pmin = Vector2( measurements.map(_.x).min, measurements.map(_.y).min )  // Top Left
       val Pmax = Vector2( measurements.map(_.x).max, measurements.map(_.y).max )  // Bottom Right
       val diameter = {
@@ -162,8 +153,7 @@ package object Delaunay {
       val Pmid = Vector2( (Pmin.x + Pmax.x)/2.0, (Pmin.y + Pmax.y)/2.0 )
     
       /*
-        Set up the supertriangle
-        This is a triangle which encompasses all the sample points.
+        Set up the supertriangle, which is a triangle which encompasses all the sample points.
         The supertriangle coordinates are added to the end of the vertex list. 
         The supertriangle is the first triangle in the triangle list.
       */
@@ -174,46 +164,81 @@ package object Delaunay {
         Vector2( Pmid.x + 2.0*diameter, Pmid.y - 1.0*diameter)
       )
      
-      val triangles = scala.collections.mutable.List( ITRIANGLE(nv+0, nv+1, nv+2) )
-      complete[0] = false;
-      n_triangles = 1;
+      val current_triangles   = List( ITRIANGLE(n_points+0, n_points+1, n_points+2) ) // initially containing the supertriangle
+      val completed_triangles = List[ITRIANGLE]                                       // initially empty 
       
-      // Include each point one at a time into the existing mesh
+      // Add each (original) point, one at a time, into the existing mesh
       for (int i=0; i<n_points; i++) {
-        val q = point(i)
+        val point_being_added = point(i)
         
-        n_edges = 0
-        
-        /*
-          Set up the edge buffer.
-          If the point 'q' lies inside the circumcircle then the three edges 
-          of that triangle are added to the edge buffer and that triangle is removed.
-        */
-        for (int j=0; j<n_triangles; j++) {
-          if (complete[j])
-            continue;
-            
-          p1 = point( v[j].p1 )
-          p2 = point( v[j].p2 )
-          p3 = point( v[j].p3 )
-          
-          val (inside, circle, r) = CircumCircle(q,  p1,  p2,  p3)
-          //xc = circle.x; yc = circle.y; r = circle.z;
-          
-          if (circle.x + r < p.x) 
-            complete[j] = true;
-            
-          if (inside) {
-            /* Check that we haven't exceeded the edge list size 
-            if (nedge+3 >= emax) {
-              emax += 100;
-              IEDGE[] edges_n = new IEDGE[emax];
-              for (int ie=0; ie<emax; ie++) edges_n[ie] = new IEDGE();
-              System.arraycopy(edges, 0, edges_n, 0, edges.length);
-              edges = edges_n;
+        val (completed_triangles_updated : List[ITRIANGLE], current_triangles_updated: List[ITRIANGLE], edges_created: AnihilationSet[IEDGE]) = 
+          // Process all the triangles in the current_triangles list
+          current_triangles.foldLeft(completed_triangles, Nil, Nil) {
+            ((completed, current, edges), triangle) => {
+              // If the point 'point_being_added' lies inside the circumcircle then the three edges 
+              // of that triangle are added to the edge buffer and that triangle is removed.
+              
+              // Find the coordinates of the points in this incomplete triangle
+              val corner1 = point( triangle.p1 )
+              val corner2 = point( triangle.p2 )
+              val corner3 = point( triangle.p3 )
+              
+              val (inside, circle, r) = CircumCircle(point_being_added,  corner1,  corner2,  corner3)
+              
+              // have we moved too far in x to bother with this one ever again? (initial point list must be sorted for this to work)
+              if (circle.x + r < point_being_added.x) {
+                ( triangle::completed, current, edges ) // Add this triangle to the 'completed' accumulator, and don't add it on current list
+              }
+              else {
+                if(inside) {
+                  // Add the triangle's edge onto the edge pile, and remove the triangle
+                  val edges_with_triangle_added = 
+                    edges
+                      .add_with_anihilation(IEDGE(triangle.p1, triangle,p2))
+                      .add_with_anihilation(IEDGE(triangle.p2, triangle,p3))
+                      .add_with_anihilation(IEDGE(triangle.p3, triangle,p1))
+                  ( completed, current, edges_with_triangle_added )
+                }
+                else {
+                  ( completed, triangle::current, edges )  // This point was not inside this triangle - just add it to the 'current' list
+                }
+              }
             }
-            */
-            
+          }
+          
+      
+
+/*        
+        //def add_point_to_triangles(live: 
+        
+        //val ( live_triangles, completed_triangles, edges ) =  add_point_to_triangles(...)
+        
+        
+        
+        // If the point 'point_being_added' lies inside the circumcircle then the three edges 
+        // of that triangle are added to the edge buffer and that triangle is removed.
+        // Do this for all relevant triangles
+        for { 
+          triangle <- current_triangles 
+          if(!triangle.completed)
+        } {
+          // Find the coordinates of the points in this incomplete triangle
+          val corner1 = point( triangle.p1 )
+          val corner2 = point( triangle.p2 )
+          val corner3 = point( triangle.p3 )
+          
+          val (inside, circle, r) = CircumCircle(point_being_added,  corner1,  corner2,  corner3)
+          
+          // have we moved too far in x to bother with this one ever again? (initial point list must be sorted)
+          if (circle.x + r < point_being_added.x) {
+            is_triangle_complete(j) = true 
+            continue
+            // inside is false in this case, for sure
+          }
+          
+          
+        }
+          if (inside) {
             // Add these edges onto the edge pile
             {
             edges[nedge+0].p1 = v[j].p1;
@@ -244,29 +269,33 @@ package object Delaunay {
           }
         }
         
-        /*
-          Tag multiple edges
-          Note: if all triangles are specified anticlockwise then all
-          interior edges are opposite pointing in direction.
-        */
+        // Tag multiple edges
+        // Note: if all triangles are specified anticlockwise then all
+        // interior edges are opposite pointing in direction.
+        
+        // Essentially, this takes the edge list, and makes duplicates anihilate each other...
+        
         for (int j=0;j<nedge-1;j++) {
           //if ( !(edges[j].p1 < 0 && edges[j].p2 < 0) )
             for (int k=j+1;k<nedge;k++) {
               if ((edges[j].p1 == edges[k].p2) && (edges[j].p2 == edges[k].p1)) {
                 edges[j].p1 = -1;
                 edges[j].p2 = -1;
+                
                 edges[k].p1 = -1;
                 edges[k].p2 = -1;
               }
-              /* Shouldn't need the following, see note above */
+              // Shouldn't need the following, see note above 
               if ((edges[j].p1 == edges[k].p1) && (edges[j].p2 == edges[k].p2)) {
                 edges[j].p1 = -1;
                 edges[j].p2 = -1;
+                
                 edges[k].p1 = -1;
                 edges[k].p2 = -1;
               }
             }
         }
+*/          
         
         /*
           Form new triangles for the current point
