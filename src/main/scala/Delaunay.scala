@@ -66,14 +66,17 @@ package object Delaunay {
     
     def add_with_anihilation(edges: Set[IEDGE], e: IEDGE) : Set[IEDGE] = {
       if( edges.contains(e) ) {
+        printf(s"removing ${e}\n")
         edges - e
       }
       else {
         val e_reversed = IEDGE(e.p2, e.p1)
         if( edges.contains(e_reversed) ) {
+          printf(s"removing ${e} reversed\n")
           edges - e_reversed 
         }
         else {
+          printf(s"adding ${e}\n")
           edges + e
         }
       }
@@ -144,10 +147,7 @@ package object Delaunay {
     // Find the maximum and minimum vertex bounds, to allow calculation of the bounding triangle
     val Pmin = Vector2( measurements.map(_.x).min, measurements.map(_.y).min )  // Top Left
     val Pmax = Vector2( measurements.map(_.x).max, measurements.map(_.y).max )  // Bottom Right
-    val diameter = {
-      val pdiff = Vector2( Pmax.x - Pmin.x, Pmax.y - Pmin.y)
-      pdiff.x max pdiff.y
-    }
+    val diameter = (Pmax.x - Pmin.x) max (Pmax.y - Pmin.y)
     val Pmid = Vector2( (Pmin.x + Pmax.x)/2, (Pmin.y + Pmax.y)/2 )
   
     /*
@@ -216,40 +216,23 @@ package object Delaunay {
       (completed_triangles_updated, new_triangles ::: current_triangles_updated)
     }
    
-   
-    // Add each (original) point, one at a time, into the existing mesh
     // Go through points in x ascending order.  No need to sort the actual points, just output the point_i in correct sequence
+    val points_sorted_x_ascending = point_list.take(n_points).zipWithIndex sortBy(_._1.x) map { case (Vector2(x,y), i) => i } 
+    printf(s"points_sorted_x_ascending = ${points_sorted_x_ascending}\n")
     
-    val points_sorted_x_ascending = point_list.zipWithIndex sortBy(_._1.x) map { case (Vector2(x,y), i) => i } 
-    
+    // Add each (original) point, one at a time, into the existing mesh
     val (final_completed, final_triangles) = 
       points_sorted_x_ascending.
         foldLeft(completed_triangles, current_triangles) {
-          case ((completed, current), point_i) => update_triangle_list_for_new_point(completed, current, point_i)
+          case ((completed, current), point_i) => 
+            printf(s"Adding point ${point_i} to mesh\n")
+            update_triangle_list_for_new_point(completed, current, point_i)
         }
-  
-    
-    /*
-      Final Step : Remove triangles with supertriangle vertices
-      These are triangles which have a vertex number greater than nv
-    for (int i=0;i<ntri;i++) {
-      if (v[i].p1 >= nv || v[i].p2 >= nv || v[i].p3 >= nv) {
-        v[i] = v[ntri-1];
-        ntri--;
-        i--;
-      }
-    }
-    */
     
     // filter out triangles with points that have point_i > n_points (since these are part of the fake supertriangle)
     // return Seq[(Int, Int, Int)]
-    
-    val full_list_of_triangles = (final_completed ::: final_triangles) map { case ITRIANGLE(p1, p2, p3) => (p1, p2, p3) } 
-    
-    full_list_of_triangles.filterNot(
-     t => (t._1>=n_points || t._2>=n_points || t._3>=n_points)
-     //(_._1>=n_points || _._2>=n_points || _._3>=n_points)
-    )
+    val full_list_of_triangles = (final_completed ::: final_triangles)
+    full_list_of_triangles.filterNot( t => (t.p1>=n_points || t.p2>=n_points || t.p3>=n_points)) map { t => (t.p1, t.p2, t.p3) } 
   }
 
 }
@@ -342,6 +325,18 @@ package object Delaunay {
               }
             }
         }
+    
+    /*
+      Final Step : Remove triangles with supertriangle vertices
+      These are triangles which have a vertex number greater than nv
+    for (int i=0;i<ntri;i++) {
+      if (v[i].p1 >= nv || v[i].p2 >= nv || v[i].p3 >= nv) {
+        v[i] = v[ntri-1];
+        ntri--;
+        i--;
+      }
+    }
+    */
 */          
         
 /*    
