@@ -61,22 +61,20 @@ package object Delaunay {
   */
 
   def Triangulation_bourke(measurements : List[Vector2]) : Seq[(Int, Int, Int)] = { // NB: List must be sorted in increasing x...
-    case class ITRIANGLE(p1:Int, p2:Int, p3:Int, completed:Boolean)
+    case class ITRIANGLE(p1:Int, p2:Int, p3:Int)
     case class IEDGE(p1:Int, p2:Int)
     
-    class AnihilationSet[IEDGE] extends Set[IEDGE] {
-      def add_with_anihilation(that: IEDGE):AnihilationSet[IEDGE] = {
-        if( this.contains(that)) {
-          this.remove(that)
+    def add_with_anihilation(edges: Set[IEDGE], e: IEDGE) : Set[IEDGE] = {
+      if( edges.contains(e) ) {
+        edges - e
+      }
+      else {
+        val e_reversed = IEDGE(e.p2, e.p1)
+        if( edges.contains(e_reversed) ) {
+          edges - e_reversed 
         }
         else {
-          val that_reversed = IEDGE(that.p2, that.p1)
-          if( this.contains(that_reversed) ) {
-            this.remove(that_reversed)
-          }
-          else {
-            this.add(that)
-          }
+          edges + e
         }
       }
     }
@@ -97,26 +95,26 @@ package object Delaunay {
     //  Return TRUE if a point q(x,y) is inside the circumcircle made up of the points p1(x,y), p2(x,y), p3(x,y)
     //  The circumcircle centre (x,y) is returned and the radius r
     //  NOTE: A point on the edge is inside the circumcircle
-    def CircumCircle( q:Vector2, p1:Vector2, p2:Vector2, p3:Vector2) : (Boolean, Vector2, Float) {
+    def CircumCircle( q:Vector2, p1:Vector2, p2:Vector2, p3:Vector2) : (/*inside :*/Boolean, /*center:*/Vector2, /*radius:*/Float) = {
       if ( Math.abs(p1.y-p2.y) < EPSILON && Math.abs(p2.y-p3.y) < EPSILON ) {
         System.out.println("CircumCircle: Points are colinear");
         (false, new Vector2(0,0), 0)
       }
       else {
-        val (mx1, my1) = ( (p1.x+p2.x)/2.0, (p1.y+p2.y)/2.0 )
-        val (mx2, my2) = ( (p2.x+p3.x)/2.0, (p2.y+p3.y)/2.0 )
+        val (mx1, my1) = ( (p1.x+p2.x)/2, (p1.y+p2.y)/2 )
+        val (mx2, my2) = ( (p2.x+p3.x)/2, (p2.y+p3.y)/2 )
         
         val c = 
           if ( Math.abs(p2.y-p1.y) < EPSILON ) {
             val m2 = -(p3.x-p2.x) / (p3.y-p2.y)
-            val xc =  (p2.x+p1.x) / 2.0
+            val xc =  (p2.x+p1.x) / 2
             val yc =  m2 * (xc - mx2) + my2
             new Vector2(xc, yc)
           }
           else 
             if ( Math.abs(p3.y-p2.y) < EPSILON ) {
               val m1 = -(p2.x-p1.x) / (p2.y-p1.y)
-              val xc =  (p3.x + p2.x) / 2.0
+              val xc =  (p3.x + p2.x) / 2
               val yc =  m1 * (xc - mx1) + my1
               new Vector2(xc, yc)
             }
@@ -128,123 +126,132 @@ package object Delaunay {
               new Vector2(xc, yc)
             }
           
-          val rsqr = {
-            val (dx, dy) = (p2.x-c.x, p2.y-c.y)
-            dx*dx + dy*dy
-          }
-          val drsqr = {
-            val (dx, dy) = (q.x-c.y, q.y-c.y)
-            dx*dx + dy*dy
-          }
-          
-          ( drsqr <= rsqr, c, Math.sqrt(rsqr) )
+        val rsqr = {
+          val (dx, dy) = (p2.x-c.x, p2.y-c.y)
+          dx*dx + dy*dy
         }
-      }
-
-      val n_points = measurements.length // Was nv
-      
-      // Find the maximum and minimum vertex bounds, to allow calculation of the bounding triangle
-      val Pmin = Vector2( measurements.map(_.x).min, measurements.map(_.y).min )  // Top Left
-      val Pmax = Vector2( measurements.map(_.x).max, measurements.map(_.y).max )  // Bottom Right
-      val diameter = {
-        val pdiff = Vector2( Pmax.x - Pmin.x, Pmax.y - Pmin.y)
-        (pdiff.x > pdiff.y) ? pdiff.x : pdiff.y
-      }
-      val Pmid = Vector2( (Pmin.x + Pmax.x)/2.0, (Pmin.y + Pmax.y)/2.0 )
-    
-      /*
-        Set up the supertriangle, which is a triangle which encompasses all the sample points.
-        The supertriangle coordinates are added to the end of the vertex list. 
-        The supertriangle is the first triangle in the triangle list.
-      */
-      
-      val point = measurements ::: List( 
-        Vector2( Pmid.x - 2.0*diameter, Pmid.y - 1.0*diameter), 
-        Vector2( Pmid.x - 0.0*diameter, Pmid.y + 2.0*diameter), 
-        Vector2( Pmid.x + 2.0*diameter, Pmid.y - 1.0*diameter)
-      )
-     
-      val current_triangles   = List( ITRIANGLE(n_points+0, n_points+1, n_points+2) ) // initially containing the supertriangle
-      val completed_triangles = List[ITRIANGLE]                                       // initially empty 
-    
-      def convert_relevant_triangles_into_new_edges(completed_triangles: List[ITRIANGLE], triangles: List[ITRIANGLE], point: Vector2) 
-            : (List[ITRIANGLE], List[ITRIANGLE], AnihilationSet[IEDGE]) = 
-        triangles.foldLeft(completed_triangles, Nil, Nil) {
-          ((completed, current, edges), triangle) => {
-            // If the point 'point_being_added' lies inside the circumcircle then the three edges 
-            // of that triangle are added to the edge buffer and that triangle is removed.
-            
-            // Find the coordinates of the points in this incomplete triangle
-            val corner1 = point( triangle.p1 )
-            val corner2 = point( triangle.p2 )
-            val corner3 = point( triangle.p3 )
-            
-            val (inside, circle, r) = CircumCircle(point,  corner1,  corner2,  corner3)
-            
-            // have we moved too far in x to bother with this one ever again? (initial point list must be sorted for this to work)
-            if (circle.x + r < point_being_added.x) {
-              ( triangle::completed, current, edges ) // Add this triangle to the 'completed' accumulator, and don't add it on current list
-            }
-            else {
-              if(inside) {
-                // Add the triangle's edge onto the edge pile, and remove the triangle
-                val edges_with_triangle_added = 
-                  edges
-                    .add_with_anihilation(IEDGE(triangle.p1, triangle,p2))
-                    .add_with_anihilation(IEDGE(triangle.p2, triangle,p3))
-                    .add_with_anihilation(IEDGE(triangle.p3, triangle,p1))
-                ( completed, current, edges_with_triangle_added )
-              }
-              else {
-                ( completed, triangle::current, edges )  // This point was not inside this triangle - just add it to the 'current' list
-              }
-            }
-          }
+        val drsqr = {
+          val (dx, dy) = (q.x-c.y, q.y-c.y)
+          dx*dx + dy*dy
         }
-    
-      def update_triangle_list_for_new_point(completed_triangles: List[ITRIANGLE], triangles: List[ITRIANGLE], point_i: Int) 
-        : (List[ITRIANGLE], List[ITRIANGLE]) = {
-        val (completed_triangles_updated : List[ITRIANGLE], current_triangles_updated: List[ITRIANGLE], edges_created: AnihilationSet[IEDGE]) = 
-          convert_relevant_triangles_into_new_edges(completed_triangles, triangles, point(i))
-        // Form new triangles for the current point
-        // All edges are arranged in clockwise order.
-        val new_triangles = for ( e<-edges_created ) {
-          ITRIANGLE( e.p1, e.p2, point_i )
-        }
-        (completed_triangles_updated, new_triangles ::: current_triangles_updated)
+        
+        ( drsqr <= rsqr, c, Math.sqrt(rsqr).toFloat )
       }
-     
-     
-      // Add each (original) point, one at a time, into the existing mesh
-      // Go through points in x ascending order.  No need to sort the actual points, just output the point_i in correct sequence
-      
-      val points_sorted_x_ascending = point zipWithIndex map { case (Vector2(x,y), i) => i } 
-      
-      val (final_completed, final_triangles) = 
-        points_sorted_x_ascending.
-          foldLeft(completed_triangles, current_triangles) {
-            ((completed, current), point_i) => update_triangle_list_for_new_point(completed, current, point_i)
-          }
-    
-      
-      /*
-        Final Step : Remove triangles with supertriangle vertices
-        These are triangles which have a vertex number greater than nv
-      for (int i=0;i<ntri;i++) {
-        if (v[i].p1 >= nv || v[i].p2 >= nv || v[i].p3 >= nv) {
-          v[i] = v[ntri-1];
-          ntri--;
-          i--;
-        }
-      }
-      */
-      // filter out triangles with points that have point_i > n_points (since these are part of the fake supertriangle)
-      // return Seq[(Int, Int, Int)]
-      
     }
 
-  }
+    val n_points = measurements.length // Was nv
+    
+    // Find the maximum and minimum vertex bounds, to allow calculation of the bounding triangle
+    val Pmin = Vector2( measurements.map(_.x).min, measurements.map(_.y).min )  // Top Left
+    val Pmax = Vector2( measurements.map(_.x).max, measurements.map(_.y).max )  // Bottom Right
+    val diameter = {
+      val pdiff = Vector2( Pmax.x - Pmin.x, Pmax.y - Pmin.y)
+      pdiff.x max pdiff.y
+    }
+    val Pmid = Vector2( (Pmin.x + Pmax.x)/2, (Pmin.y + Pmax.y)/2 )
   
+    /*
+      Set up the supertriangle, which is a triangle which encompasses all the sample points.
+      The supertriangle coordinates are added to the end of the vertex list. 
+      The supertriangle is the first triangle in the triangle list.
+    */
+    
+    val point_list = measurements ::: List( 
+      Vector2( Pmid.x - 2*diameter, Pmid.y - 1*diameter), 
+      Vector2( Pmid.x - 0*diameter, Pmid.y + 2*diameter), 
+      Vector2( Pmid.x + 2*diameter, Pmid.y - 1*diameter)
+    )
+   
+    val current_triangles   = List( ITRIANGLE(n_points+0, n_points+1, n_points+2) ) // initially containing the supertriangle
+    val completed_triangles: List[ITRIANGLE] = Nil                                  // initially empty 
+  
+    def convert_relevant_triangles_into_new_edges(completed_triangles: List[ITRIANGLE], triangles: List[ITRIANGLE], point: Vector2) =
+          //: (updated_completed: List[ITRIANGLE], updated_triangles: List[ITRIANGLE], edges:Set[IEDGE]) = 
+      triangles.foldLeft( (completed_triangles: List[ITRIANGLE], List[ITRIANGLE](), Set.empty[IEDGE]) ) {
+        case ((completed, current, edges), triangle) => {
+          // If the point 'point_being_added' lies inside the circumcircle then the three edges 
+          // of that triangle are added to the edge buffer and that triangle is removed.
+          
+          // Find the coordinates of the points in this incomplete triangle
+          val corner1 = point_list( triangle.p1 )
+          val corner2 = point_list( triangle.p2 )
+          val corner3 = point_list( triangle.p3 )
+          
+          val (inside, circle, r) = CircumCircle(point,  corner1,  corner2,  corner3)
+          
+          // have we moved too far in x to bother with this one ever again? (initial point list must be sorted for this to work)
+          if (circle.x + r < point.x) {
+            ( triangle::completed, current, edges ) // Add this triangle to the 'completed' accumulator, and don't add it on current list
+          }
+          else {
+            if(inside) {
+              // Add the triangle's edge onto the edge pile, and remove the triangle
+              val edges_with_triangle1_added = add_with_anihilation(edges,                      IEDGE(triangle.p1, triangle.p2))
+              val edges_with_triangle2_added = add_with_anihilation(edges_with_triangle1_added, IEDGE(triangle.p2, triangle.p3))
+              val edges_with_triangle3_added = add_with_anihilation(edges_with_triangle2_added, IEDGE(triangle.p3, triangle.p1))
+              
+              /*
+              val edges_with_triangle_added = 
+                edges
+                  .add_with_anihilation(IEDGE(triangle.p1, triangle,p2))
+                  .add_with_anihilation(IEDGE(triangle.p2, triangle,p3))
+                  .add_with_anihilation(IEDGE(triangle.p3, triangle,p1))
+              */
+              ( completed, current, edges_with_triangle3_added )
+            }
+            else {
+              ( completed, triangle::current, edges )  // This point was not inside this triangle - just add it to the 'current' list
+            }
+          }
+        }
+      }
+  
+    def update_triangle_list_for_new_point(completed_triangles: List[ITRIANGLE], triangles: List[ITRIANGLE], point_i: Int) = {
+      // : (completed_triangles: List[ITRIANGLE], current_triangles: List[ITRIANGLE]) 
+      val (completed_triangles_updated, current_triangles_updated, edges_created) = 
+        convert_relevant_triangles_into_new_edges(completed_triangles, triangles, point_list(point_i))
+        
+      // Form new triangles for the current point, all edges arranged in clockwise order.
+      val new_triangles = for ( e <- edges_created.toList ) yield ITRIANGLE( e.p1, e.p2, point_i )
+      (completed_triangles_updated, new_triangles ::: current_triangles_updated)
+    }
+   
+   
+    // Add each (original) point, one at a time, into the existing mesh
+    // Go through points in x ascending order.  No need to sort the actual points, just output the point_i in correct sequence
+    
+    val points_sorted_x_ascending = point_list.zipWithIndex sortBy(_._1.x) map { case (Vector2(x,y), i) => i } 
+    
+    val (final_completed, final_triangles) = 
+      points_sorted_x_ascending.
+        foldLeft(completed_triangles, current_triangles) {
+          case ((completed, current), point_i) => update_triangle_list_for_new_point(completed, current, point_i)
+        }
+  
+    
+    /*
+      Final Step : Remove triangles with supertriangle vertices
+      These are triangles which have a vertex number greater than nv
+    for (int i=0;i<ntri;i++) {
+      if (v[i].p1 >= nv || v[i].p2 >= nv || v[i].p3 >= nv) {
+        v[i] = v[ntri-1];
+        ntri--;
+        i--;
+      }
+    }
+    */
+    
+    // filter out triangles with points that have point_i > n_points (since these are part of the fake supertriangle)
+    // return Seq[(Int, Int, Int)]
+    
+    val full_list_of_triangles = (final_completed ::: final_triangles) map { case ITRIANGLE(p1, p2, p3) => (p1, p2, p3) } 
+    
+    full_list_of_triangles.filterNot(
+     t => (t._1>=n_points || t._2>=n_points || t._3>=n_points)
+     //(_._1>=n_points || _._2>=n_points || _._3>=n_points)
+    )
+  }
+
 }
 
 
