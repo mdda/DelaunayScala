@@ -130,11 +130,11 @@ package object Delaunay {
             }
           
         val rsqr = {
-          val (dx, dy) = (p2.x-c.x, p2.y-c.y)
+          val (dx, dy) = (p2.x-c.x, p2.y-c.y)  // Distance from (any) 1 point on triangle to circle center
           dx*dx + dy*dy
         }
         val drsqr = {
-          val (dx, dy) = (q.x-c.y, q.y-c.y)
+          val (dx, dy) = (q.x -c.y, q.y -c.y)    // Distance from query_point to circle center
           dx*dx + dy*dy
         }
         
@@ -162,8 +162,8 @@ package object Delaunay {
       Vector2( Pmid.x + 2*diameter, Pmid.y - 1*diameter)
     )
    
-    val current_triangles   = List( ITRIANGLE(n_points+0, n_points+1, n_points+2) ) // initially containing the supertriangle
-    val completed_triangles: List[ITRIANGLE] = Nil                                  // initially empty 
+    val main_current_triangles   = List( ITRIANGLE(n_points+0, n_points+1, n_points+2) ) // initially containing the supertriangle
+    val main_completed_triangles: List[ITRIANGLE] = Nil                                  // initially empty 
   
     def convert_relevant_triangles_into_new_edges(completed_triangles: List[ITRIANGLE], triangles: List[ITRIANGLE], point: Vector2) =
           //: (updated_completed: List[ITRIANGLE], updated_triangles: List[ITRIANGLE], edges:Set[IEDGE]) = 
@@ -213,6 +213,9 @@ package object Delaunay {
         
       // Form new triangles for the current point, all edges arranged in clockwise order.
       val new_triangles = for ( e <- edges_created.toList ) yield ITRIANGLE( e.p1, e.p2, point_i )
+      printf(s"completed_triangles_updated = ${completed_triangles_updated}\n")
+      printf(s"new_triangles = ${new_triangles}\n")
+      printf(s"current_triangles_updated = ${current_triangles_updated}\n")
       (completed_triangles_updated, new_triangles ::: current_triangles_updated)
     }
    
@@ -223,7 +226,7 @@ package object Delaunay {
     // Add each (original) point, one at a time, into the existing mesh
     val (final_completed, final_triangles) = 
       points_sorted_x_ascending.
-        foldLeft(completed_triangles, current_triangles) {
+        foldLeft( (main_completed_triangles, main_current_triangles) ) {
           case ((completed, current), point_i) => 
             printf(s"Adding point ${point_i} to mesh\n")
             update_triangle_list_for_new_point(completed, current, point_i)
