@@ -60,23 +60,25 @@ package object Delaunay {
     }
   */
 
-  def Triangulation_bourke(measurements : List[Vector2]) : Seq[(Int, Int, Int)] = { // NB: List must be sorted in increasing x...
+  def Triangulation_bourke(measurements : List[Vector2]) : Seq[(Int, Int, Int)] = { // NB: List will be sorted internally in increasing x...
     case class ITRIANGLE(p1:Int, p2:Int, p3:Int)
     case class IEDGE(p1:Int, p2:Int)
     
     def add_with_anihilation(edges: Set[IEDGE], e: IEDGE) : Set[IEDGE] = {
       if( edges.contains(e) ) {
-        //printf(s"removing ${e}\n")
+        printf(s"FOUND ${e} NOT REVERSED *********************\n")
         edges - e
+        //edges // HMM - tried this out...
       }
       else {
         val e_reversed = IEDGE(e.p2, e.p1)
         if( edges.contains(e_reversed) ) {
-          //printf(s"removing ${e} reversed\n")
-          edges - e_reversed 
+          printf(s"removing ${e} reversed\n")
+          edges - e_reversed
+          //edges - e_reversed - e   // HMM - tried this out...
         }
         else {
-          //printf(s"adding ${e}\n")
+          printf(s"adding ${e}\n")
           edges + e
         }
       }
@@ -104,30 +106,30 @@ package object Delaunay {
         (false, new Vector2(0,0), 0)
       }
       else {
-        val (mx1, my1) = ( (p1.x+p2.x)/2, (p1.y+p2.y)/2 )
-        val (mx2, my2) = ( (p2.x+p3.x)/2, (p2.y+p3.y)/2 )
+        val mid1 = Vector2( (p1.x+p2.x)/2, (p1.y+p2.y)/2 )
+        val mid2 = Vector2( (p2.x+p3.x)/2, (p2.y+p3.y)/2 )
         
         val c = 
           if ( Math.abs(p2.y-p1.y) < EPSILON ) {
-            //println("CircumCircle: p1&p2 have same y");
-            val m2 = -(p3.x-p2.x) / (p3.y-p2.y)
+            println("CircumCircle: p1&p2 have same y");
+            val d2 = -(p3.x-p2.x) / (p3.y-p2.y)
             val xc =  (p2.x+p1.x) / 2
-            val yc =  m2 * (xc - mx2) + my2
+            val yc =  d2 * (xc - mid2.x) + mid2.y
             new Vector2(xc, yc)
           }
           else 
             if ( Math.abs(p3.y-p2.y) < EPSILON ) {
-              //println("CircumCircle: p2&p3 have same y");
-              val m1 = -(p2.x-p1.x) / (p2.y-p1.y)
+              println("CircumCircle: p2&p3 have same y");
+              val d1 = -(p2.x-p1.x) / (p2.y-p1.y)
               val xc =  (p3.x + p2.x) / 2
-              val yc =  m1 * (xc - mx1) + my1
+              val yc =  d1 * (xc - mid1.x) + mid1.y
               new Vector2(xc, yc)
             }
             else {
-              val m1 = -(p2.x-p1.x) / (p2.y-p1.y)
-              val m2 = -(p3.x-p2.x) / (p3.y-p2.y)
-              val xc =  (m1*mx1 - m2*mx2 + my2 - my1) / (m1 - m2)
-              val yc =  m1 * (xc - mx1) + my1
+              val d1 = -(p2.x-p1.x) / (p2.y-p1.y)
+              val d2 = -(p3.x-p2.x) / (p3.y-p2.y)
+              val xc =  (d1*mid1.x - d2*mid2.x + mid2.y - mid1.y) / (d1 - d2)
+              val yc =  d1 * (xc - mid1.x) + mid1.y
               new Vector2(xc, yc)
             }
           
