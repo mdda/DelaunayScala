@@ -68,17 +68,15 @@ package object Delaunay {
       if( edges.contains(e) ) {
         printf(s"FOUND ${e} NOT REVERSED *********************\n")
         edges - e
-        //edges // HMM - tried this out...
       }
       else {
         val e_reversed = IEDGE(e.p2, e.p1)
         if( edges.contains(e_reversed) ) {
-          printf(s"removing ${e} reversed\n")
+          //printf(s"removing ${e} reversed\n")
           edges - e_reversed
-          //edges - e_reversed - e   // HMM - tried this out...
         }
         else {
-          printf(s"adding ${e}\n")
+          //printf(s"adding ${e}\n")
           edges + e
         }
       }
@@ -93,9 +91,7 @@ package object Delaunay {
     }
     */
     
-    //case class XYZ(p1:Float, p2:Float, p3:Float)
-
-    val EPSILON = 0.000001
+    val EPSILON = 0.0000001
 
     //  Return TRUE if a point q(x,y) is inside the circumcircle made up of the points p1(x,y), p2(x,y), p3(x,y)
     //  The circumcircle centre (x,y) is returned and the radius r
@@ -103,6 +99,7 @@ package object Delaunay {
     def CircumCircle( q:Vector2, p1:Vector2, p2:Vector2, p3:Vector2) : (/*inside :*/Boolean, /*center:*/Vector2, /*radius:*/Float) = {
       if ( Math.abs(p1.y-p2.y) < EPSILON && Math.abs(p2.y-p3.y) < EPSILON ) {
         System.err.println("CircumCircle: Points are colinear");
+        println("CircumCircle: Points are colinear *****************************");
         (false, new Vector2(0,0), 0)
       }
       else {
@@ -111,24 +108,24 @@ package object Delaunay {
         
         val c = 
           if ( Math.abs(p2.y-p1.y) < EPSILON ) {
-            println("CircumCircle: p1&p2 have same y");
+            //println("CircumCircle: p1&p2 have same y");
             val d2 = -(p3.x-p2.x) / (p3.y-p2.y)
-            val xc =  (p2.x+p1.x) / 2
+            val xc =  mid1.x // (p2.x+p1.x) / 2
             val yc =  d2 * (xc - mid2.x) + mid2.y
             new Vector2(xc, yc)
           }
           else 
             if ( Math.abs(p3.y-p2.y) < EPSILON ) {
-              println("CircumCircle: p2&p3 have same y");
+              //println("CircumCircle: p2&p3 have same y");
               val d1 = -(p2.x-p1.x) / (p2.y-p1.y)
-              val xc =  (p3.x + p2.x) / 2
+              val xc =  mid2.x // (p3.x+p2.x) / 2
               val yc =  d1 * (xc - mid1.x) + mid1.y
               new Vector2(xc, yc)
             }
             else {
               val d1 = -(p2.x-p1.x) / (p2.y-p1.y)
               val d2 = -(p3.x-p2.x) / (p3.y-p2.y)
-              val xc =  (d1*mid1.x - d2*mid2.x + mid2.y - mid1.y) / (d1 - d2)
+              val xc =  ((d1*mid1.x - mid1.y) - (d2*mid2.x - mid2.y)) / (d1 - d2)
               val yc =  d1 * (xc - mid1.x) + mid1.y
               new Vector2(xc, yc)
             }
@@ -224,20 +221,25 @@ package object Delaunay {
       //printf(s"completed_triangles_updated = ${completed_triangles_updated}\n")
       //printf(s"new_triangles = ${new_triangles}\n")
       //printf(s"current_triangles_updated = ${current_triangles_updated}\n")
-      (completed_triangles_updated, new_triangles ::: current_triangles_updated)
+      (completed_triangles_updated, new_triangles ::: current_triangles_updated, point_i)
     }
    
-    // Go through points in x ascending order.  No need to sort the actual points, just output the point_i in correct sequence
-    val points_sorted_x_ascending = point_list.take(n_points).zipWithIndex sortBy(_._1.x) map { case (Vector2(x,y), i) => i } 
+    // Go through points in x ascending order.  No need to sort the actual points, just output the point_i in correct sequence (relies on sortBy being 'stable')
+    val points_sorted_x_ascending = point_list.take(n_points).zipWithIndex sortBy(_._1.y) sortBy(_._1.x) map { case (Vector2(x,y), i) => i } 
+    //for ( i <- points_sorted_x_ascending ) printf(f"${i}%2d = [${point_list(i)}]\n")
     //printf(s"points_sorted_x_ascending = ${points_sorted_x_ascending}\n")
     
     // Add each (original) point, one at a time, into the existing mesh
-    val (final_completed, final_triangles) = 
+    val (final_completed, final_triangles, point_i_last) = 
       points_sorted_x_ascending.
-        foldLeft( (main_completed_triangles, main_current_triangles) ) {
-          case ((completed, current), point_i) => 
-            //printf(s"Adding point ${point_i} to mesh\n")
-            update_triangle_list_for_new_point(completed, current, point_i)
+        foldLeft( (main_completed_triangles, main_current_triangles, -1) ) {
+          case ((completed, current, prev_i), point_i) => 
+            if( prev_i>=0 && (point_list(prev_i) == point_list(point_i)) ) {
+              printf(s"Skipping duplicate points {${prev_i},${point_i}}\n")
+              (completed, current, point_i)
+            }
+            else 
+              update_triangle_list_for_new_point(completed, current, point_i)
         }
     
     // filter out triangles with points that have point_i > n_points (since these are part of the fake supertriangle)
