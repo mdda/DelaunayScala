@@ -66,17 +66,17 @@ package object Delaunay {
     
     def add_with_anihilation(edges: Set[IEDGE], e: IEDGE) : Set[IEDGE] = {
       if( edges.contains(e) ) {
-        printf(s"removing ${e}\n")
+        //printf(s"removing ${e}\n")
         edges - e
       }
       else {
         val e_reversed = IEDGE(e.p2, e.p1)
         if( edges.contains(e_reversed) ) {
-          printf(s"removing ${e} reversed\n")
+          //printf(s"removing ${e} reversed\n")
           edges - e_reversed 
         }
         else {
-          printf(s"adding ${e}\n")
+          //printf(s"adding ${e}\n")
           edges + e
         }
       }
@@ -100,7 +100,7 @@ package object Delaunay {
     //  NOTE: A point on the edge is inside the circumcircle
     def CircumCircle( q:Vector2, p1:Vector2, p2:Vector2, p3:Vector2) : (/*inside :*/Boolean, /*center:*/Vector2, /*radius:*/Float) = {
       if ( Math.abs(p1.y-p2.y) < EPSILON && Math.abs(p2.y-p3.y) < EPSILON ) {
-        System.out.println("CircumCircle: Points are colinear");
+        System.err.println("CircumCircle: Points are colinear");
         (false, new Vector2(0,0), 0)
       }
       else {
@@ -109,6 +109,7 @@ package object Delaunay {
         
         val c = 
           if ( Math.abs(p2.y-p1.y) < EPSILON ) {
+            //println("CircumCircle: p1&p2 have same y");
             val m2 = -(p3.x-p2.x) / (p3.y-p2.y)
             val xc =  (p2.x+p1.x) / 2
             val yc =  m2 * (xc - mx2) + my2
@@ -116,6 +117,7 @@ package object Delaunay {
           }
           else 
             if ( Math.abs(p3.y-p2.y) < EPSILON ) {
+              //println("CircumCircle: p2&p3 have same y");
               val m1 = -(p2.x-p1.x) / (p2.y-p1.y)
               val xc =  (p3.x + p2.x) / 2
               val yc =  m1 * (xc - mx1) + my1
@@ -133,12 +135,12 @@ package object Delaunay {
           val (dx, dy) = (p2.x-c.x, p2.y-c.y)  // Distance from (any) 1 point on triangle to circle center
           dx*dx + dy*dy
         }
-        val drsqr = {
-          val (dx, dy) = (q.x -c.y, q.y -c.y)    // Distance from query_point to circle center
+        val qsqr = {
+          val (dx, dy) = (q.x -c.x, q.y -c.y)    // Distance from query_point to circle center
           dx*dx + dy*dy
         }
         
-        ( drsqr <= rsqr, c, Math.sqrt(rsqr).toFloat )
+        ( qsqr <= rsqr, c, Math.sqrt(rsqr).toFloat )
       }
     }
 
@@ -164,6 +166,7 @@ package object Delaunay {
    
     val main_current_triangles   = List( ITRIANGLE(n_points+0, n_points+1, n_points+2) ) // initially containing the supertriangle
     val main_completed_triangles: List[ITRIANGLE] = Nil                                  // initially empty 
+    //printf(s"main_current_triangles = ${main_current_triangles}\n")
   
     def convert_relevant_triangles_into_new_edges(completed_triangles: List[ITRIANGLE], triangles: List[ITRIANGLE], point: Vector2) =
           //: (updated_completed: List[ITRIANGLE], updated_triangles: List[ITRIANGLE], edges:Set[IEDGE]) = 
@@ -180,11 +183,13 @@ package object Delaunay {
           val (inside, circle, r) = CircumCircle(point,  corner1,  corner2,  corner3)
           
           // have we moved too far in x to bother with this one ever again? (initial point list must be sorted for this to work)
-          if (circle.x + r < point.x) {
+          if (false && circle.x + r < point.x) {  // false && 
+            //printf(s"point_x=${point.x} BEYOND triangle : ${triangle} with circle=[${circle}, ${r}]\n")
             ( triangle::completed, current, edges ) // Add this triangle to the 'completed' accumulator, and don't add it on current list
           }
           else {
             if(inside) {
+              //printf(s"point INSIDE triangle : ${triangle}\n")
               // Add the triangle's edge onto the edge pile, and remove the triangle
               val edges_with_triangle1_added = add_with_anihilation(edges,                      IEDGE(triangle.p1, triangle.p2))
               val edges_with_triangle2_added = add_with_anihilation(edges_with_triangle1_added, IEDGE(triangle.p2, triangle.p3))
@@ -200,6 +205,7 @@ package object Delaunay {
               ( completed, current, edges_with_triangle3_added )
             }
             else {
+              //printf(s"point outside triangle : ${triangle}\n")
               ( completed, triangle::current, edges )  // This point was not inside this triangle - just add it to the 'current' list
             }
           }
@@ -213,22 +219,22 @@ package object Delaunay {
         
       // Form new triangles for the current point, all edges arranged in clockwise order.
       val new_triangles = for ( e <- edges_created.toList ) yield ITRIANGLE( e.p1, e.p2, point_i )
-      printf(s"completed_triangles_updated = ${completed_triangles_updated}\n")
-      printf(s"new_triangles = ${new_triangles}\n")
-      printf(s"current_triangles_updated = ${current_triangles_updated}\n")
+      //printf(s"completed_triangles_updated = ${completed_triangles_updated}\n")
+      //printf(s"new_triangles = ${new_triangles}\n")
+      //printf(s"current_triangles_updated = ${current_triangles_updated}\n")
       (completed_triangles_updated, new_triangles ::: current_triangles_updated)
     }
    
     // Go through points in x ascending order.  No need to sort the actual points, just output the point_i in correct sequence
     val points_sorted_x_ascending = point_list.take(n_points).zipWithIndex sortBy(_._1.x) map { case (Vector2(x,y), i) => i } 
-    printf(s"points_sorted_x_ascending = ${points_sorted_x_ascending}\n")
+    //printf(s"points_sorted_x_ascending = ${points_sorted_x_ascending}\n")
     
     // Add each (original) point, one at a time, into the existing mesh
     val (final_completed, final_triangles) = 
       points_sorted_x_ascending.
         foldLeft( (main_completed_triangles, main_current_triangles) ) {
           case ((completed, current), point_i) => 
-            printf(s"Adding point ${point_i} to mesh\n")
+            //printf(s"Adding point ${point_i} to mesh\n")
             update_triangle_list_for_new_point(completed, current, point_i)
         }
     
