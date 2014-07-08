@@ -182,7 +182,7 @@ package object Delaunay {
           val (inside, circle, r) = CircumCircle(point,  corner1,  corner2,  corner3)
           
           // have we moved too far in x to bother with this one ever again? (initial point list must be sorted for this to work)
-          if (false && circle.x + r < point.x) {  // false && 
+          if (circle.x + r < point.x) {  // (false &&) to disable the 'completed' optimisation
             //printf(s"point_x=${point.x} BEYOND triangle : ${triangle} with circle=[${circle}, ${r}]\n")
             ( triangle::completed, current, edges ) // Add this triangle to the 'completed' accumulator, and don't add it on current list
           }
@@ -225,22 +225,25 @@ package object Delaunay {
     }
    
     // Go through points in x ascending order.  No need to sort the actual points, just output the point_i in correct sequence (relies on sortBy being 'stable')
-    val points_sorted_x_ascending = point_list.take(n_points).zipWithIndex sortBy(_._1.y) sortBy(_._1.x) map { case (Vector2(x,y), i) => i } 
+    val points_sorted_xy_ascending = point_list.take(n_points).zipWithIndex sortBy(_._1.y) sortBy(_._1.x) map { case (Vector2(x,y), i) => i } 
     //for ( i <- points_sorted_x_ascending ) printf(f"${i}%2d = [${point_list(i)}]\n")
     //printf(s"points_sorted_x_ascending = ${points_sorted_x_ascending}\n")
     
+    val points_sorted_and_deduped = 
+      points_sorted_xy_ascending.foldLeft( (Nil:List[Int], -1) ) {
+        case ((list, point_last), point_i) => if(point_last>=0 && point_list(point_last) == point_list(point_i)) {
+          printf(s"Skipping duplicate points {${point_last},${point_i}}\n")
+          ( list, point_i ) // Don't add this point to the list
+        }
+        else
+          ( point_i::list, point_i ) 
+      }._1 reverse // list of points is first element of tuple, and were pre-pended, so list needs reversing
+    
     // Add each (original) point, one at a time, into the existing mesh
     val (final_completed, final_triangles, point_i_last) = 
-      points_sorted_x_ascending.
-        foldLeft( (main_completed_triangles, main_current_triangles, -1) ) {
-          case ((completed, current, prev_i), point_i) => 
-            if( prev_i>=0 && (point_list(prev_i) == point_list(point_i)) ) {
-              printf(s"Skipping duplicate points {${prev_i},${point_i}}\n")
-              (completed, current, point_i)
-            }
-            else 
-              update_triangle_list_for_new_point(completed, current, point_i)
-        }
+      points_sorted_and_deduped.foldLeft( (main_completed_triangles, main_current_triangles, -1) ) {
+        case ((completed, current, prev_i), point_i) => update_triangle_list_for_new_point(completed, current, point_i)
+      }
     
     // filter out triangles with points that have point_i > n_points (since these are part of the fake supertriangle)
     // return Seq[(Int, Int, Int)]
