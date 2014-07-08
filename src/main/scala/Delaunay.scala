@@ -1,6 +1,8 @@
 //package Delaunay
 
-import VSFM.{Vector2,Vector3}
+import VSFM.{Vector2}
+// Actual definition is :
+//case class Vector2(x:Float, y:Float)
 
 package object Delaunay {
   def Triangulation_n4(measurements : List[Vector2]) : Seq[(Int, Int, Int)] = {
@@ -81,6 +83,15 @@ package object Delaunay {
         }
       }
     }
+    
+    /*
+    class AnhilationSet[IEDGE] extends Set[IEDGE] {
+      def add(e: IEDGE) : AnhilationSet[IEDGE] = {
+        //this + e
+        super + e
+      }
+    }
+    */
     
     /*
      {
@@ -253,108 +264,6 @@ package object Delaunay {
 
 }
 
-
-/*        
-        //def add_point_to_triangles(live: 
-        
-        //val ( live_triangles, completed_triangles, edges ) =  add_point_to_triangles(...)
-        
-        
-        
-        // If the point 'point_being_added' lies inside the circumcircle then the three edges 
-        // of that triangle are added to the edge buffer and that triangle is removed.
-        // Do this for all relevant triangles
-        for { 
-          triangle <- current_triangles 
-          if(!triangle.completed)
-        } {
-          // Find the coordinates of the points in this incomplete triangle
-          val corner1 = point( triangle.p1 )
-          val corner2 = point( triangle.p2 )
-          val corner3 = point( triangle.p3 )
-          
-          val (inside, circle, r) = CircumCircle(point_being_added,  corner1,  corner2,  corner3)
-          
-          // have we moved too far in x to bother with this one ever again? (initial point list must be sorted)
-          if (circle.x + r < point_being_added.x) {
-            is_triangle_complete(j) = true 
-            continue
-            // inside is false in this case, for sure
-          }
-          
-          
-        }
-          if (inside) {
-            // Add these edges onto the edge pile
-            {
-            edges[nedge+0].p1 = v[j].p1;
-            edges[nedge+0].p2 = v[j].p2;
-            
-            edges[nedge+1].p1 = v[j].p2;
-            edges[nedge+1].p2 = v[j].p3;
-            
-            edges[nedge+2].p1 = v[j].p3;
-            edges[nedge+2].p2 = v[j].p1;
-            
-            nedge += 3;
-            }
-            
-            // Delete this triangle (cover it over with another one)
-            {
-            v[j].p1 = v[ntri-1].p1; 
-            v[j].p2 = v[ntri-1].p2;
-            v[j].p3 = v[ntri-1].p3;
-            
-            complete[j] = complete[ntri-1];
-            
-            ntri--;
-            }
-            
-            // Do this iteration again (one the data we've just swapped in)
-            j--;
-          }
-        }
-        
-        // Tag multiple edges
-        // Note: if all triangles are specified anticlockwise then all
-        // interior edges are opposite pointing in direction.
-        
-        // Essentially, this takes the edge list, and makes duplicates anihilate each other...
-        
-        for (int j=0;j<nedge-1;j++) {
-          //if ( !(edges[j].p1 < 0 && edges[j].p2 < 0) )
-            for (int k=j+1;k<nedge;k++) {
-              if ((edges[j].p1 == edges[k].p2) && (edges[j].p2 == edges[k].p1)) {
-                edges[j].p1 = -1;
-                edges[j].p2 = -1;
-                
-                edges[k].p1 = -1;
-                edges[k].p2 = -1;
-              }
-              // Shouldn't need the following, see note above 
-              if ((edges[j].p1 == edges[k].p1) && (edges[j].p2 == edges[k].p2)) {
-                edges[j].p1 = -1;
-                edges[j].p2 = -1;
-                
-                edges[k].p1 = -1;
-                edges[k].p2 = -1;
-              }
-            }
-        }
-    
-    /*
-      Final Step : Remove triangles with supertriangle vertices
-      These are triangles which have a vertex number greater than nv
-    for (int i=0;i<ntri;i++) {
-      if (v[i].p1 >= nv || v[i].p2 >= nv || v[i].p3 >= nv) {
-        v[i] = v[ntri-1];
-        ntri--;
-        i--;
-      }
-    }
-    */
-*/          
-        
 /*    
     public static void main (String[] args) {
       int nv = 20;
