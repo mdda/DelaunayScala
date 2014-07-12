@@ -1,50 +1,16 @@
-//package Delaunay
-
 import VSFM.{Vector2}
 // Actual definition is :
 //case class Vector2(x:Float, y:Float)
 
 package object Delaunay {
-  def Triangulation_n4(measurements : List[Vector2]) : Seq[(Int, Int, Int)] = {
-    val n = measurements.length
-    
-    val x = measurements map { _.x }
-    val y = measurements map { _.y }
-    val z = (x zip y) map { case (a,b) => (a*a + b*b) }
-    
-    def is_addable(i:Int,j:Int,k:Int) : Boolean = {
-      val xn = (y(j)-y(i)) * (z(k)-z(i)) - (y(k)-y(i)) * (z(j)-z(i))
-      val yn = (z(j)-z(i)) * (x(k)-x(i)) - (z(k)-z(i)) * (x(j)-x(i))
-      val zn = (x(j)-x(i)) * (y(k)-y(i)) - (x(k)-x(i)) * (y(j)-y(i))
-
-      val flag = (zn<0) && (0 until n).forall { 
-         m => (((x(m)-x(i))*xn + (y(m)-y(i))*yn + (z(m)-z(i))*zn) <= 0)
-      }
-      flag
-    }
-    
-    for {
-      i <- (0) until (n-2)
-      j <- (i+1) until n
-      k <- (i+1) until n
-      if (j!=k)
-      if is_addable(i,j,k)
-    } yield {
-      printf(s"Adding (${i}, ${j}, ${k})\n")
-      (i,j,k)
-    }
-  }
-  
-  /* Do something better than n^4 here... */
-  
   /*
-    Takes as input vertices in array xy.  The vertex array need not be sorted
-    
-    Returned is a list of triangular corners in the array v
-    These triangles are arranged in a consistent clockwise order.
+    Takes as input a list of vertices (array need not be sorted)
+    Returns a list of triangular corners, these triangle corners are arranged in a consistent clockwise order.
   */
+  
+  // _bourke method : See : http://paulbourke.net/papers/triangulate/ for original source (heavily modified here)
 
-  def Triangulation_bourke(measurements : List[Vector2]) : Seq[(Int, Int, Int)] = { 
+  def Triangulation(measurements : List[Vector2]) : Seq[(Int, Int, Int)] = {   
     case class ITRIANGLE(p1:Int, p2:Int, p3:Int)
     case class IEDGE(p1:Int, p2:Int)
     
@@ -167,7 +133,6 @@ package object Delaunay {
   
     def convert_relevant_triangles_into_new_edges(completed_triangles: List[ITRIANGLE], triangles: List[ITRIANGLE], point: Vector2) =
           //: (updated_completed: List[ITRIANGLE], updated_triangles: List[ITRIANGLE], edges:Set[IEDGE]) = 
-      //triangles.foldLeft( (completed_triangles: List[ITRIANGLE], List[ITRIANGLE](), Set.empty[IEDGE]) ) {
       triangles.foldLeft( (completed_triangles: List[ITRIANGLE], List[ITRIANGLE](), EdgeAnihilationSet(Set.empty[IEDGE])) ) {
         case ((completed, current, edges), triangle) => {
           // If the point 'point_being_added' lies inside the circumcircle then the three edges 
@@ -248,7 +213,7 @@ package object Delaunay {
     printf(f"\n\n// Creating ${n}%d random points.\n\n")
 
     val measurements = for {i <- 0 until n} yield Vector2( (i*400.0/n).toFloat, (Math.random() * 400).toFloat )
-    val triangles = Triangulation_bourke(measurements.toList)
+    val triangles = Triangulation(measurements.toList)
     
     printf("size(400,400); noFill()\n")
 
@@ -264,4 +229,36 @@ package object Delaunay {
       }
     }
   }
+
+  /* Don't use this : It's O(n^4) */
+  def Triangulation_n4(measurements : List[Vector2]) : Seq[(Int, Int, Int)] = {
+    val n = measurements.length
+    
+    val x = measurements map { _.x }
+    val y = measurements map { _.y }
+    val z = (x zip y) map { case (a,b) => (a*a + b*b) }
+    
+    def is_addable(i:Int,j:Int,k:Int) : Boolean = {
+      val xn = (y(j)-y(i)) * (z(k)-z(i)) - (y(k)-y(i)) * (z(j)-z(i))
+      val yn = (z(j)-z(i)) * (x(k)-x(i)) - (z(k)-z(i)) * (x(j)-x(i))
+      val zn = (x(j)-x(i)) * (y(k)-y(i)) - (x(k)-x(i)) * (y(j)-y(i))
+
+      val flag = (zn<0) && (0 until n).forall { 
+         m => (((x(m)-x(i))*xn + (y(m)-y(i))*yn + (z(m)-z(i))*zn) <= 0)
+      }
+      flag
+    }
+    
+    for {
+      i <- (0) until (n-2)
+      j <- (i+1) until n
+      k <- (i+1) until n
+      if (j!=k)
+      if is_addable(i,j,k)
+    } yield {
+      printf(s"Adding (${i}, ${j}, ${k})\n")
+      (i,j,k)
+    }
+  }
+
 }
