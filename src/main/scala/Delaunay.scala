@@ -2,6 +2,9 @@ import VSFM.{Vector2}
 // Actual definition is :
 //case class Vector2(x:Float, y:Float)
 
+// To see it working within sbt, do a : 
+// run-main Delaunay.package 5
+
 package object Delaunay {
   /*
     Takes as input a list of vertices (array need not be sorted)
@@ -206,8 +209,11 @@ package object Delaunay {
     full_list_of_triangles.filterNot( t => (t.p1>=n_points || t.p2>=n_points || t.p3>=n_points)) map { t => (t.p1, t.p2, t.p3) } 
   }
 
-  def demo(nv: Int=20):Unit = {
+  def main(args: Array[String]) {
+    //args.zipWithIndex map { t => println(s"arg[${t._2}] = '${t._1}'") }
+    val nv = if(args.length>0) args(0).toInt else -1
     val n = if(nv<=0 || nv>1000) 20 else nv
+    
     printf("\n\n//Copy the following into 'Free Processing'\n")
     printf("//   http://www.openprocessing.org/sketch/create\n")
     printf(f"\n\n// Creating ${n}%d random points.\n\n")
