@@ -64,7 +64,7 @@ package object Delaunay {
     def CircumCircle( q:Vector2, p1:Vector2, p2:Vector2, p3:Vector2) : (/*inside :*/Boolean, /*center:*/Vector2, /*radius:*/Float) = {
       if ( Math.abs(p1.y-p2.y) < EPSILON && Math.abs(p2.y-p3.y) < EPSILON ) {
         System.err.println("CircumCircle: Points are colinear");
-        println("CircumCircle: Points are colinear *****************************");
+        println("CircumCircle: Points are colinear *****************************")
         (false, new Vector2(0,0), 0)
       }
       else {
@@ -73,17 +73,17 @@ package object Delaunay {
         
         val c = 
           if ( Math.abs(p2.y-p1.y) < EPSILON ) {
-            //println("CircumCircle: p1&p2 have same y");
+            //println("CircumCircle: p1&p2 have same y")
             val d2 = -(p3.x-p2.x) / (p3.y-p2.y)
-            val xc =  mid1.x // (p2.x+p1.x) / 2
+            val xc =  mid1.x
             val yc =  d2 * (xc - mid2.x) + mid2.y
             new Vector2(xc, yc)
           }
           else 
             if ( Math.abs(p3.y-p2.y) < EPSILON ) {
-              //println("CircumCircle: p2&p3 have same y");
+              //println("CircumCircle: p2&p3 have same y")
               val d1 = -(p2.x-p1.x) / (p2.y-p1.y)
-              val xc =  mid2.x // (p3.x+p2.x) / 2
+              val xc =  mid2.x
               val yc =  d1 * (xc - mid1.x) + mid1.y
               new Vector2(xc, yc)
             }
@@ -108,7 +108,7 @@ package object Delaunay {
       }
     }
 
-    val n_points = measurements.length // Was nv
+    val n_points = measurements.length
     
     // Find the maximum and minimum vertex bounds, to allow calculation of the bounding triangle
     val Pmin = Vector2( measurements.map(_.x).min, measurements.map(_.y).min )  // Top Left
