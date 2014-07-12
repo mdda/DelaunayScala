@@ -38,34 +38,39 @@ package object Delaunay {
   /* Do something better than n^4 here... */
   
   /*
-    Takes as input NV vertices in array pxyz
-    The vertex array pxyz must be big enough to hold 3 more points
-    The vertex array must be sorted in increasing x values say
+    Takes as input vertices in array xy.  The vertex array need not be sorted
     
-    Returned is a list of ntri triangular faces in the array v
+    Returned is a list of triangular corners in the array v
     These triangles are arranged in a consistent clockwise order.
-    The triangle array 'v' should be malloced to 3 * nv
-
-    
-    qsort(p,nv,sizeof(XYZ),XYZCompare);
-    
-    int XYZCompare(void *v1,void *v2) {
-      XYZ *p1,*p2;
-      p1 = v1;
-      p2 = v2;
-      if (p1->x < p2->x)
-        return(-1);
-      else if (p1->x > p2->x)
-        return(1);
-      else
-        return(0);
-    }
   */
 
-  def Triangulation_bourke(measurements : List[Vector2]) : Seq[(Int, Int, Int)] = { // NB: List will be sorted internally in increasing x...
+  def Triangulation_bourke(measurements : List[Vector2]) : Seq[(Int, Int, Int)] = { 
     case class ITRIANGLE(p1:Int, p2:Int, p3:Int)
     case class IEDGE(p1:Int, p2:Int)
     
+    case class EdgeAnihilationSet(s: Set[IEDGE]) {
+      def add(e: IEDGE): EdgeAnihilationSet = {
+        if( s.contains(e) ) {
+          printf(s"FOUND ${e} NOT REVERSED *********************\n")
+          new EdgeAnihilationSet(s - e)
+        }
+        else {
+          val e_reversed = IEDGE(e.p2, e.p1)
+          if( s.contains(e_reversed) ) {
+            //printf(s"removing ${e} reversed\n")
+            new EdgeAnihilationSet(s - e_reversed)
+          }
+          else {
+            //printf(s"adding ${e}\n")
+            new EdgeAnihilationSet(s + e)
+          }
+        }
+      }
+      def toList() = s.toList
+    }
+    
+    /*
+    // Should benchmark this less idiomatic version...
     def add_with_anihilation(edges: Set[IEDGE], e: IEDGE) : Set[IEDGE] = {
       if( edges.contains(e) ) {
         printf(s"FOUND ${e} NOT REVERSED *********************\n")
@@ -81,23 +86,6 @@ package object Delaunay {
           //printf(s"adding ${e}\n")
           edges + e
         }
-      }
-    }
-    
-    /*
-    class AnhilationSet[IEDGE] extends Set[IEDGE] {
-      def add(e: IEDGE) : AnhilationSet[IEDGE] = {
-        //this + e
-        super + e
-      }
-    }
-    */
-    
-    /*
-     {
-      override def equals(o: Any) = o match {
-        case that: IEDGE(q1, q2) => ((p1==q1) && (p2==q2)) || ((p1==q2) && (p2==q1))
-        case _ => false
       }
     }
     */
@@ -176,11 +164,11 @@ package object Delaunay {
    
     val main_current_triangles   = List( ITRIANGLE(n_points+0, n_points+1, n_points+2) ) // initially containing the supertriangle
     val main_completed_triangles: List[ITRIANGLE] = Nil                                  // initially empty 
-    //printf(s"main_current_triangles = ${main_current_triangles}\n")
   
     def convert_relevant_triangles_into_new_edges(completed_triangles: List[ITRIANGLE], triangles: List[ITRIANGLE], point: Vector2) =
           //: (updated_completed: List[ITRIANGLE], updated_triangles: List[ITRIANGLE], edges:Set[IEDGE]) = 
-      triangles.foldLeft( (completed_triangles: List[ITRIANGLE], List[ITRIANGLE](), Set.empty[IEDGE]) ) {
+      //triangles.foldLeft( (completed_triangles: List[ITRIANGLE], List[ITRIANGLE](), Set.empty[IEDGE]) ) {
+      triangles.foldLeft( (completed_triangles: List[ITRIANGLE], List[ITRIANGLE](), EdgeAnihilationSet(Set.empty[IEDGE])) ) {
         case ((completed, current, edges), triangle) => {
           // If the point 'point_being_added' lies inside the circumcircle then the three edges 
           // of that triangle are added to the edge buffer and that triangle is removed.
@@ -201,18 +189,12 @@ package object Delaunay {
             if(inside) {
               //printf(s"point INSIDE triangle : ${triangle}\n")
               // Add the triangle's edge onto the edge pile, and remove the triangle
-              val edges_with_triangle1_added = add_with_anihilation(edges,                      IEDGE(triangle.p1, triangle.p2))
-              val edges_with_triangle2_added = add_with_anihilation(edges_with_triangle1_added, IEDGE(triangle.p2, triangle.p3))
-              val edges_with_triangle3_added = add_with_anihilation(edges_with_triangle2_added, IEDGE(triangle.p3, triangle.p1))
-              
-              /*
               val edges_with_triangle_added = 
                 edges
-                  .add_with_anihilation(IEDGE(triangle.p1, triangle,p2))
-                  .add_with_anihilation(IEDGE(triangle.p2, triangle,p3))
-                  .add_with_anihilation(IEDGE(triangle.p3, triangle,p1))
-              */
-              ( completed, current, edges_with_triangle3_added )
+                  .add( IEDGE(triangle.p1, triangle.p2) )
+                  .add( IEDGE(triangle.p2, triangle.p3) )
+                  .add( IEDGE(triangle.p3, triangle.p1) )
+              ( completed, current, edges_with_triangle_added )
             }
             else {
               //printf(s"point outside triangle : ${triangle}\n")
@@ -229,13 +211,11 @@ package object Delaunay {
         
       // Form new triangles for the current point, all edges arranged in clockwise order.
       val new_triangles = for ( e <- edges_created.toList ) yield ITRIANGLE( e.p1, e.p2, point_i )
-      //printf(s"completed_triangles_updated = ${completed_triangles_updated}\n")
-      //printf(s"new_triangles = ${new_triangles}\n")
-      //printf(s"current_triangles_updated = ${current_triangles_updated}\n")
-      (completed_triangles_updated, new_triangles ::: current_triangles_updated, point_i)
+      (completed_triangles_updated, new_triangles ::: current_triangles_updated)
     }
    
-    // Go through points in x ascending order.  No need to sort the actual points, just output the point_i in correct sequence (relies on sortBy being 'stable')
+    // Go through points in x ascending order.  No need to sort the actual points, just output the point_i in correct sequence 
+    // (relies on sortBy being 'stable' - so that sorting on y first will enable duplicate detection afterwards)
     val points_sorted_xy_ascending = point_list.take(n_points).zipWithIndex sortBy(_._1.y) sortBy(_._1.x) map { case (Vector2(x,y), i) => i } 
     //for ( i <- points_sorted_x_ascending ) printf(f"${i}%2d = [${point_list(i)}]\n")
     //printf(s"points_sorted_x_ascending = ${points_sorted_x_ascending}\n")
@@ -251,55 +231,37 @@ package object Delaunay {
       }._1 reverse // list of points is first element of tuple, and were pre-pended, so list needs reversing
     
     // Add each (original) point, one at a time, into the existing mesh
-    val (final_completed, final_triangles, point_i_last) = 
-      points_sorted_and_deduped.foldLeft( (main_completed_triangles, main_current_triangles, -1) ) {
-        case ((completed, current, prev_i), point_i) => update_triangle_list_for_new_point(completed, current, point_i)
+    val (final_completed, final_triangles) = 
+      points_sorted_and_deduped.foldLeft( (main_completed_triangles, main_current_triangles) ) {
+        case ((completed, current), point_i) => update_triangle_list_for_new_point(completed, current, point_i)
       }
     
-    // filter out triangles with points that have point_i > n_points (since these are part of the fake supertriangle)
-    // return Seq[(Int, Int, Int)]
     val full_list_of_triangles = (final_completed ::: final_triangles)
+    // filter out triangles with points that have point_i >= n_points (since these are part of the fake supertriangle)
     full_list_of_triangles.filterNot( t => (t.p1>=n_points || t.p2>=n_points || t.p3>=n_points)) map { t => (t.p1, t.p2, t.p3) } 
   }
 
-}
+  def demo(nv: Int=20):Unit = {
+    val n = if(nv<=0 || nv>1000) 20 else nv
+    printf("\n\n//Copy the following into 'Free Processing'\n")
+    printf("//   http://www.openprocessing.org/sketch/create\n")
+    printf(f"\n\n// Creating ${n}%d random points.\n\n")
 
-/*    
-    public static void main (String[] args) {
-      int nv = 20;
-      if (args.length > 0 && args[0] != null) nv = new Integer(args[0]).intValue();
-      if (nv <= 0 || nv > 1000) nv = 20;
-      
-      //System.out.println("Creating " + nv + " random points.");
-      
-      XYZ[] points = new XYZ[ nv+3 ];
-      
-      for (int i=0; i<points.length; i++)
-        points[i] = new XYZ( i*4.0, 400.0 * Math.random(), 0.0 );
-      
-      ITRIANGLE[]	 triangles 	= new ITRIANGLE[ nv*3 ];
-      
-      for (int i=0; i<triangles.length; i++)
-        triangles[i] = new ITRIANGLE();
-      
-      int ntri = Triangulate( nv, points, triangles );
-      
-      // copy-paste the following output into free processing:
-      //   http://processing.org/
-      
-      System.out.println("size(400,400); noFill();");
-      
-      for (int tt=0; tt<points.length; tt++){
-        System.out.println("rect("+points[tt].x+","+points[tt].y+", 3, 3);");
-      }
-      
-      for (int tt=0; tt<ntri; tt++){
-        System.out.println("beginShape(TRIANGLES);");
-        System.out.println("vertex( "+points[triangles[tt].p1].x+","+points[triangles[tt].p1].y+");");
-        System.out.println("vertex( "+points[triangles[tt].p2].x+","+points[triangles[tt].p2].y+");");
-        System.out.println("vertex( "+points[triangles[tt].p3].x+","+points[triangles[tt].p3].y+");");
-        System.out.println("endShape();");
-      }
-      
+    val measurements = for {i <- 0 until n} yield Vector2( (i*400.0/n).toFloat, (Math.random() * 400).toFloat )
+    val triangles = Triangulation_bourke(measurements.toList)
+    
+    printf("size(400,400); noFill()\n")
+
+    measurements map { v => 
+      printf(s"rect(${v.x}-3, ${v.y}-3, 5, 5);\n") 
     }
-*/
+    triangles map { t => {
+        printf("beginShape(TRIANGLES);\n")
+        printf(s" vertex( ${measurements(t._1).x}, ${measurements(t._1).y});\n");
+        printf(s" vertex( ${measurements(t._2).x}, ${measurements(t._2).y});\n");
+        printf(s" vertex( ${measurements(t._3).x}, ${measurements(t._3).y});\n");
+        printf("endShape();\n")
+      }
+    }
+  }
+}
