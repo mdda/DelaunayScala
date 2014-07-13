@@ -9,9 +9,9 @@ package object Delaunay {
   
   // _bourke method : See : http://paulbourke.net/papers/triangulate/ for original source (heavily modified here)
 
-  import VSFM.{Vector2}
+  //import VSFM.{Vector2}
   // Actual definition is :
-  //case class Vector2(x:Float, y:Float)
+  case class Vector2(x:Float, y:Float)
 
   def Triangulation(measurements : List[Vector2]) : Seq[(Int, Int, Int)] = {   
     case class ITRIANGLE(p1:Int, p2:Int, p3:Int)
