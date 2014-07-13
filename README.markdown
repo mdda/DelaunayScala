@@ -17,6 +17,8 @@ The meat of it is just the ```src/main/scala/Delaunay.scala``` file.
 
 Please let me know if there are insufficient comments.
 
+The ```.geany``` folder contains a simple file layout for my geany editor extension ```geany-project-tree```.
+
  
 ## Usage
 
